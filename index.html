@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Study Tour Fund Manager · Supabase</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+:root{
+  --ink:#172033;--muted:#687386;--line:#e5e9f0;--bg:#f4f6fa;--primary:#2457a6;--primary2:#173e7c;
+  --green:#13845b;--red:#bd3d45;--card-shadow:0 3px 12px #1d35570a;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.5 Arial,Helvetica,sans-serif}
+header{background:linear-gradient(120deg,#173e7c,#2b67b8);color:#fff;padding:25px 18px}
+.wrap{max-width:1100px;margin:auto;padding:0 16px}
+h1{font-size:25px;margin:0 0 4px}header p{margin:0;color:#dce8fa}
+nav{display:flex;gap:8px;flex-wrap:wrap;margin:18px 0}
+nav button,.btn{border:0;border-radius:9px;padding:11px 15px;font-weight:700;cursor:pointer}
+nav button{background:#e8eef8;color:#23436e}nav button.active{background:var(--primary);color:white}
+main{max-width:1100px;margin:0 auto;padding:0 16px 35px}.panel{display:none}.panel.active{display:block}
+.card{background:white;border:1px solid var(--line);border-radius:14px;padding:19px;margin-bottom:16px;box-shadow:var(--card-shadow)}
+h2{font-size:19px;margin:0 0 15px}.grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:13px}
+label{display:block;font-weight:700;font-size:13px;margin-bottom:5px;color:#3c4759}
+input,select{width:100%;padding:11px 12px;border:1px solid #cfd6e1;border-radius:8px;background:#fff;font:inherit;color:var(--ink)}
+input:focus,select:focus{outline:2px solid #b8d1f5;border-color:var(--primary)}
+.field{min-width:0}.btn{background:var(--primary);color:white;margin-top:14px}.btn:hover{background:var(--primary2)}
+.btn.secondary{background:#e9eef6;color:#294466}.btn.danger{background:#fff0f0;color:var(--red);padding:7px 10px;margin:0}
+.btn.small{padding:7px 10px;margin:0;font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:16px}
+.stat{background:white;border:1px solid var(--line);border-radius:12px;padding:15px}
+.stat span{display:block;color:var(--muted);font-size:13px}.stat strong{display:block;font-size:23px;margin-top:4px}
+.table-wrap{overflow-x:auto}table{width:100%;border-collapse:collapse;min-width:560px}
+th,td{text-align:left;padding:11px 9px;border-bottom:1px solid var(--line)}
+th{font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);background:#f8f9fc}
+td.actions{white-space:nowrap}.empty{text-align:center;color:var(--muted);padding:25px}
+.notice{padding:11px 13px;border-radius:8px;background:#eef5ff;color:#31517d;font-size:13px;margin-top:12px}
+.toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end;margin-bottom:14px}.toolbar .field{flex:1;min-width:160px}
+footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
+.status-badge{font-size:12px;padding:2px 8px;border-radius:20px;background:#e9eef6;color:#294466;display:inline-block;margin-left:8px}
+
+/* ===== Report header (screen + print) ===== */
+.report-header{ text-align:center; margin-bottom:18px; padding:14px 10px; border-bottom:2px solid var(--primary); }
+.report-header h1{ font-size:24px; margin:0 0 4px; color:var(--primary2); letter-spacing:1px; }
+.report-header h2{ font-size:18px; margin:0 0 6px; color:var(--ink); font-weight:700; }
+.report-header .report-sub{ font-size:14px; color:var(--muted); margin:0; font-style:italic; }
+
+@media(max-width:620px){.grid,.stats{grid-template-columns:1fr}.stat strong{font-size:21px}header{padding:20px 0}h1{font-size:22px}}
+@media print{
+  body{background:#fff}
+  .no-print,header,nav,footer{display:none!important}
+  main{padding:0}
+  .panel{display:none!important}
+  #reports{display:block!important}
+  body.participants-pdf #reports > :not(.report-header):not(#participantsReportCard){display:none!important}
+  body.participants-pdf #reports .stats{display:none!important}
+  body.participants-pdf #participantsReportCard .toolbar{display:none!important}
+  body.participants-pdf #participantsReportCard{display:block!important}
+  .card{box-shadow:none;border:0;padding:0;margin-bottom:18px}
+  .table-wrap{overflow:visible}
+  table{min-width:0}
+  th,td{padding:7px}
+  .report-header{ margin-bottom:14px; padding:6px 0; }
+  .report-header h1{ font-size:20px; }
+  .report-header h2{ font-size:15px; }
+  .report-header .report-sub{ font-size:12px; }
+}
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Study Tour Fund Manager <span class="status-badge" id="dbStatus">☁️ Supabase</span></h1>
+    <p>Student details · Receipt entry · Collection reports</p>
+  </div>
+</header>
+<main>
+  <nav class="no-print">
+    <button class="active" data-tab="dashboard">Dashboard</button>
+    <button data-tab="students">Students</button>
+    <button data-tab="receipts">Add Receipt</button>
+    <button data-tab="reports">Reports</button>
+    <button data-tab="backup">Backup &amp; Restore</button>
+  </nav>
+
+  <!-- DASHBOARD -->
+  <section id="dashboard" class="panel active">
+    <div class="stats">
+      <div class="stat"><span>Total students</span><strong id="dashStudents">0</strong></div>
+      <div class="stat"><span>Total receipts</span><strong id="dashReceipts">0</strong></div>
+      <div class="stat"><span>Total collection</span><strong id="dashTotal">₹0.00</strong></div>
+    </div>
+    <div class="card">
+      <h2>Recent receipts</h2>
+      <div class="table-wrap">
+        <table><thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Amount</th></tr></thead>
+          <tbody id="recentRows"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- STUDENTS -->
+  <section id="students" class="panel">
+    <div class="card">
+      <h2>Add student</h2>
+      <form id="studentForm">
+        <div class="grid">
+          <div class="field"><label for="studentName">Student name</label><input id="studentName" required maxlength="100" placeholder="Enter student name"></div>
+          <div class="field"><label for="studentClass">Class</label><input id="studentClass" required maxlength="50" placeholder="e.g. 10 A"></div>
+          <div class="field"><label for="studentGender">Gender</label>
+            <select id="studentGender" required>
+              <option value="">Select gender</option>
+              <option value="Male">Male</option>
+              <option value="Female">Female</option>
+              <option value="Other">Other</option>
+            </select>
+          </div>
+        </div>
+        <button class="btn" type="submit" id="addStudentBtn">Add student</button>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Student list</h2>
+      <div class="table-wrap">
+        <table><thead><tr><th>Sl. No.</th><th>Name</th><th>Class</th><th>Gender</th><th>Total paid</th><th>Action</th></tr></thead>
+          <tbody id="studentRows"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- RECEIPTS -->
+  <section id="receipts" class="panel">
+    <div class="card">
+      <h2>Record a receipt</h2>
+      <form id="receiptForm">
+        <div class="grid">
+          <div class="field"><label for="receiptStudent">Student</label>
+            <select id="receiptStudent" required><option value="">Select student</option></select>
+          </div>
+          <div class="field"><label for="receiptDate">Receipt date</label><input id="receiptDate" type="date" required></div>
+          <div class="field"><label for="receiptAmount">Amount (₹)</label><input id="receiptAmount" type="number" min="0.01" step="0.01" required placeholder="Enter amount"></div>
+        </div>
+        <button class="btn" type="submit" id="saveReceiptBtn">Save receipt</button>
+        <div class="notice">Each receipt is recorded separately. You can view the full collection in Reports.</div>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Recent receipts</h2>
+      <div class="table-wrap">
+        <table><thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Amount</th><th>Action</th></tr></thead>
+          <tbody id="receiptRows"></tbody></table>
+      </div>
+    </div>
+  </section>
+
+  <!-- BACKUP / RESTORE -->
+  <section id="backup" class="panel">
+    <div class="card">
+      <h2>Backup data</h2>
+      <p>Download a backup containing all student details and receipt records. Keep the file safely so you can restore your data later.</p>
+      <button class="btn" id="backupBtn" type="button">Download backup</button>
+    </div>
+    <div class="card">
+      <h2>Restore data</h2>
+      <p>Select a backup JSON file created by this application. Restoring will replace the data currently saved in Supabase.</p>
+      <div class="field"><label for="restoreFile">Choose backup file</label><input id="restoreFile" type="file" accept=".json,application/json"></div>
+      <button class="btn danger" id="restoreBtn" type="button">Restore backup</button>
+      <div class="notice">Tip: Download a backup before restoring. Restore works on this device/browser; it does not automatically sync data between devices.</div>
+    </div>
+  </section>
+
+  <!-- REPORTS -->
+  <section id="reports" class="panel">
+
+    <!-- PRINT HEADER -->
+    <div class="report-header">
+      <h1>STUDY TOUR 2026</h1>
+      <h2>GVHSS Chirakkara</h2>
+      <p class="report-sub">List of Participating Students</p>
+    </div>
+
+    <!-- STATS -->
+    <div class="stats">
+      <div class="stat"><span>Total collection</span><strong id="reportTotal">₹0.00</strong></div>
+      <div class="stat"><span>Number of receipts</span><strong id="reportCount">0</strong></div>
+      <div class="stat"><span>Students who paid</span><strong id="paidCount">0</strong></div>
+    </div>
+
+    <!-- PARTICIPATING STUDENTS LIST -->
+    <div class="card" id="participantsReportCard">
+      <div class="toolbar no-print">
+        <button class="btn" id="participantsPdfBtn" type="button">Download Participating Students PDF</button>
+      </div>
+      <h2>List of Participating Students</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:70px">Sl No</th>
+              <th>Name</th>
+              <th>Class</th>
+              <th>Gender</th>
+            </tr>
+          </thead>
+          <tbody id="participantRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- DAILY COLLECTION -->
+    <div class="card">
+      <h2>Daily collection report</h2>
+      <div class="toolbar no-print">
+        <div class="field"><label for="reportDate">Select date</label><input id="reportDate" type="date"></div>
+        <button class="btn" id="dailyBtn">Show daily report</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Number of receipts</th><th>Collection</th></tr></thead>
+          <tbody id="dailyRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- STUDENT-WISE COLLECTION -->
+    <div class="card">
+      <h2>Student-wise collection report</h2>
+      <div class="toolbar no-print">
+        <div class="field"><label for="studentFilter">Filter student</label>
+          <select id="studentFilter"><option value="">All students</option></select>
+        </div>
+        <button class="btn secondary" id="exportBtn">Export CSV</button>
+        <button class="btn secondary" onclick="window.print()">Print report</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Sl No</th><th>Name</th><th>Class</th><th>Gender</th><th>Receipts</th><th>Total paid</th></tr></thead>
+          <tbody id="wiseRows"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- RECEIPT DETAILS -->
+    <div class="card">
+      <h2>Receipt details</h2>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Amount</th></tr></thead>
+          <tbody id="allRows"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+  <footer>Study Tour Fund Manager · Data is saved in Supabase.</footer>
+</main>
+
+<script>
+// ============================================================
+//  SUPABASE CLIENT INITIALIZATION
+// ============================================================
+const SUPABASE_URL = 'https://qkkjawlzdsgaaoghffyx.supabase.co';
+const SUPABASE_ANON_KEY = 'sb_publishable_ZUh7_cqDki824azPDDMg5w_6YUvmDlC';
+
+let supabaseClient;
+try {
+  supabaseClient = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+} catch (e) {
+  console.error('Failed to initialize Supabase:', e);
+  alert('Could not initialize Supabase. Check console for details.');
+}
+
+// ============================================================
+//  APPLICATION STATE
+// ============================================================
+let students = [];   // { id, name, className, gender }
+let receipts = [];   // { id, studentId, date, amount, created }
+
+// ============================================================
+//  UTILITY FUNCTIONS
+// ============================================================
+const $ = id => document.getElementById(id);
+const money = n => '₹' + Number(n || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const studentById = id => students.find(s => s.id === id);
+const totalFor = id => receipts.filter(r => r.studentId === id).reduce((a, r) => a + Number(r.amount), 0);
+const emptyRow = (cols, msg) => `<tr><td class="empty" colspan="${cols}">${msg}</td></tr>`;
+
+// ============================================================
+//  DATA FETCHING (from Supabase)
+// ============================================================
+async function loadDataFromSupabase() {
+  if (!supabaseClient) return;
+  try {
+    $('dbStatus').textContent = '☁️ Syncing...';
+
+    const { data: stuData, error: stuErr } = await supabaseClient
+      .from('students')
+      .select('*')
+      .order('name', { ascending: true });
+    if (stuErr) throw stuErr;
+
+    const { data: recData, error: recErr } = await supabaseClient
+      .from('receipts')
+      .select('*')
+      .order('date', { ascending: false })
+      .order('created', { ascending: false });
+    if (recErr) throw recErr;
+
+    students = (stuData || []).map(s => ({
+      id: s.id,
+      name: s.name,
+      className: s.class_name,
+      gender: s.gender || 'Not specified'
+    }));
+
+    receipts = (recData || []).map(r => ({
+      id: r.id,
+      studentId: r.student_id,
+      date: r.date,
+      amount: Number(r.amount),
+      created: r.created ? new Date(r.created).getTime() : 0
+    }));
+
+    $('dbStatus').textContent = '☁️ Supabase';
+    render();
+  } catch (err) {
+    console.error('loadDataFromSupabase error:', err);
+    $('dbStatus').textContent = '⚠️ Sync error';
+    alert('Could not load data from Supabase: ' + (err.message || err));
+  }
+}
+
+// ============================================================
+//  RENDER – ALL UI BINDINGS
+// ============================================================
+function render() {
+  const total = receipts.reduce((a, r) => a + Number(r.amount), 0);
+
+  // Dashboard stats
+  $('dashStudents').textContent = students.length;
+  $('dashReceipts').textContent = receipts.length;
+  $('dashTotal').textContent = money(total);
+
+  // Report stats
+  $('reportTotal').textContent = money(total);
+  $('reportCount').textContent = receipts.length;
+  $('paidCount').textContent = new Set(receipts.map(r => r.studentId)).size;
+
+  // Student rows
+  $('studentRows').innerHTML = students.length
+    ? students.map((s, i) =>
+        `<tr>
+          <td>${i + 1}</td>
+          <td>${esc(s.name)}</td>
+          <td>${esc(s.className)}</td>
+          <td>${esc(s.gender)}</td>
+          <td>${money(totalFor(s.id))}</td>
+          <td class="actions">
+            <button class="btn danger" onclick="deleteStudent('${s.id}')">Delete</button>
+          </td>
+        </tr>`
+      ).join('')
+    : emptyRow(6, 'No students added yet');
+
+  // Dropdowns
+  const opts = students.map(s => `<option value="${s.id}">${esc(s.name)} — ${esc(s.className)}</option>`).join('');
+  const oldReceipt = $('receiptStudent').value;
+  const oldFilter = $('studentFilter').value;
+  $('receiptStudent').innerHTML = '<option value="">Select student</option>' + opts;
+  $('studentFilter').innerHTML = '<option value="">All students</option>' + opts;
+  if (students.some(s => s.id === oldReceipt)) $('receiptStudent').value = oldReceipt;
+  if (students.some(s => s.id === oldFilter)) $('studentFilter').value = oldFilter;
+
+  // Sorted receipts
+  const sorted = [...receipts].sort((a, b) => b.date.localeCompare(a.date) || b.created - a.created);
+
+  const receiptHtml = r => {
+    const s = studentById(r.studentId);
+    return `<tr>
+      <td>${esc(r.date)}</td>
+      <td>${esc(s?.name || 'Deleted student')}</td>
+      <td>${esc(s?.className || '')}</td>
+      <td>${money(r.amount)}</td>`;
+  };
+
+  $('recentRows').innerHTML = sorted.length
+    ? sorted.slice(0, 8).map(r => receiptHtml(r) + '</tr>').join('')
+    : emptyRow(4, 'No receipts recorded yet');
+
+  $('receiptRows').innerHTML = sorted.length
+    ? sorted.map(r =>
+        receiptHtml(r) + `<td><button class="btn danger" onclick="deleteReceipt('${r.id}')">Delete</button></td></tr>`
+      ).join('')
+    : emptyRow(5, 'No receipts recorded yet');
+
+  // ============ List of Participating Students ============
+  $('participantRows').innerHTML = students.length
+    ? students.map((s, i) => `<tr>
+        <td>${i + 1}</td>
+        <td>${esc(s.name)}</td>
+        <td>${esc(s.className)}</td>
+        <td>${esc(s.gender)}</td>
+      </tr>`).join('')
+    : emptyRow(4, 'No students added yet');
+
+  // Student-wise collection report (with Sl No)
+  const f = $('studentFilter').value;
+  const list = students.filter(s => !f || s.id === f);
+  $('wiseRows').innerHTML = list.length
+    ? list.map((s, i) => {
+        const rs = receipts.filter(r => r.studentId === s.id);
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${esc(s.name)}</td>
+          <td>${esc(s.className)}</td>
+          <td>${esc(s.gender)}</td>
+          <td>${rs.length}</td>
+          <td>${money(totalFor(s.id))}</td>
+        </tr>`;
+      }).join('')
+    : emptyRow(6, 'No students found');
+
+  // All receipts table
+  $('allRows').innerHTML = sorted.length
+    ? sorted.map(r => receiptHtml(r) + '</tr>').join('')
+    : emptyRow(4, 'No receipts recorded yet');
+
+  renderDaily();
+}
+
+// ============================================================
+//  DAILY REPORT
+// ============================================================
+function renderDaily() {
+  const date = $('reportDate').value;
+  const groups = {};
+  receipts
+    .filter(r => !date || r.date === date)
+    .forEach(r => {
+      if (!groups[r.date]) groups[r.date] = { count: 0, total: 0 };
+      groups[r.date].count++;
+      groups[r.date].total += Number(r.amount);
+    });
+
+  const days = Object.keys(groups).sort().reverse();
+  $('dailyRows').innerHTML = days.length
+    ? days.map(d => `<tr>
+        <td>${esc(d)}</td>
+        <td>${groups[d].count}</td>
+        <td>${money(groups[d].total)}</td>
+      </tr>`).join('')
+    : emptyRow(3, 'No collection for selected date');
+}
+
+// ============================================================
+//  ADD STUDENT
+// ============================================================
+$('studentForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const name = $('studentName').value.trim();
+  const className = $('studentClass').value.trim();
+  const gender = $('studentGender').value;
+  if (!name || !className) { alert('Please fill in name and class.'); return; }
+  if (!gender) { alert('Please select gender.'); return; }
+  if (!supabaseClient) { alert('Supabase not initialized.'); return; }
+
+  try {
+    $('addStudentBtn').disabled = true;
+    $('addStudentBtn').textContent = 'Adding...';
+
+    const { data, error } = await supabaseClient
+      .from('students')
+      .insert([{ name, class_name: className, gender }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    students.push({
+      id: data.id,
+      name: data.name,
+      className: data.class_name,
+      gender: data.gender || 'Not specified'
+    });
+
+    e.target.reset();
+    render();
+    alert('Student added successfully.');
+  } catch (err) {
+    console.error('addStudent error:', err);
+    alert('Failed to add student: ' + (err.message || err));
+  } finally {
+    $('addStudentBtn').disabled = false;
+    $('addStudentBtn').textContent = 'Add student';
+  }
+});
+
+// ============================================================
+//  ADD RECEIPT
+// ============================================================
+$('receiptForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const studentId = $('receiptStudent').value;
+  const date = $('receiptDate').value;
+  const amount = Number($('receiptAmount').value);
+
+  if (!studentById(studentId)) { alert('Please select a student.'); return; }
+  if (!date || !Number.isFinite(amount) || amount <= 0) {
+    alert('Enter a valid date and amount.'); return;
+  }
+  if (!supabaseClient) { alert('Supabase not initialized.'); return; }
+
+  try {
+    $('saveReceiptBtn').disabled = true;
+    $('saveReceiptBtn').textContent = 'Saving...';
+
+    const { data, error } = await supabaseClient
+      .from('receipts')
+      .insert([{ student_id: studentId, date, amount }])
+      .select()
+      .single();
+
+    if (error) throw error;
+
+    receipts.push({
+      id: data.id,
+      studentId: data.student_id,
+      date: data.date,
+      amount: Number(data.amount),
+      created: data.created ? new Date(data.created).getTime() : Date.now()
+    });
+
+    $('receiptAmount').value = '';
+    render();
+    alert('Receipt saved successfully.');
+  } catch (err) {
+    console.error('addReceipt error:', err);
+    alert('Failed to save receipt: ' + (err.message || err));
+  } finally {
+    $('saveReceiptBtn').disabled = false;
+    $('saveReceiptBtn').textContent = 'Save receipt';
+  }
+});
+
+// ============================================================
+//  DELETE RECEIPT
+// ============================================================
+window.deleteReceipt = async id => {
+  if (!confirm('Delete this receipt?')) return;
+  if (!supabaseClient) { alert('Supabase not initialized.'); return; }
+  try {
+    const { error } = await supabaseClient.from('receipts').delete().eq('id', id);
+    if (error) throw error;
+    receipts = receipts.filter(r => r.id !== id);
+    render();
+  } catch (err) {
+    console.error('deleteReceipt error:', err);
+    alert('Failed to delete receipt: ' + (err.message || err));
+  }
+};
+
+// ============================================================
+//  DELETE STUDENT
+// ============================================================
+window.deleteStudent = async id => {
+  if (receipts.some(r => r.studentId === id)) {
+    alert('This student has receipts. Delete their receipts first.'); return;
+  }
+  if (!confirm('Delete this student?')) return;
+  if (!supabaseClient) { alert('Supabase not initialized.'); return; }
+  try {
+    const { error } = await supabaseClient.from('students').delete().eq('id', id);
+    if (error) throw error;
+    students = students.filter(s => s.id !== id);
+    render();
+  } catch (err) {
+    console.error('deleteStudent error:', err);
+    alert('Failed to delete student: ' + (err.message || err));
+  }
+};
+
+// ============================================================
+//  TAB NAVIGATION
+// ============================================================
+document.querySelectorAll('nav button').forEach(b => {
+  b.addEventListener('click', () => {
+    document.querySelectorAll('nav button').forEach(x => x.classList.toggle('active', x === b));
+    document.querySelectorAll('.panel').forEach(p => p.classList.toggle('active', p.id === b.dataset.tab));
+    if (b.dataset.tab === 'reports') render();
+  });
+});
+
+// ============================================================
+//  EXPORT CSV
+// ============================================================
+$('exportBtn').addEventListener('click', () => {
+  const rows = [
+    ['Sl No', 'Name', 'Class', 'Gender', 'Receipt count', 'Total paid'],
+    ...students.map((s, i) => [
+      i + 1,
+      s.name,
+      s.className,
+      s.gender,
+      receipts.filter(r => r.studentId === s.id).length,
+      totalFor(s.id).toFixed(2)
+    ])
+  ];
+  const csv = rows.map(row => row.map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',')).join('\r\n');
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' }));
+  a.download = 'study-tour-student-collection.csv';
+  a.click();
+  URL.revokeObjectURL(a.href);
+});
+
+// ============================================================
+//  PARTICIPATING STUDENTS PDF (uses browser Print > Save as PDF)
+// ============================================================
+$('participantsPdfBtn').addEventListener('click', () => {
+  if (!students.length) {
+    alert('No students are available to include in the PDF.');
+    return;
+  }
+  document.body.classList.add('participants-pdf');
+  const cleanup = () => {
+    document.body.classList.remove('participants-pdf');
+    window.removeEventListener('afterprint', cleanup);
+  };
+  window.addEventListener('afterprint', cleanup);
+  window.print();
+  // Fallback cleanup for browsers that do not fire afterprint reliably.
+  setTimeout(cleanup, 1500);
+});
+
+// ============================================================
+//  BACKUP
+// ============================================================
+$('backupBtn').addEventListener('click', async () => {
+  if (!supabaseClient) { alert('Supabase not initialized.'); return; }
+  try {
+    const { data: stuData, error: stuErr } = await supabaseClient.from('students').select('*');
+    if (stuErr) throw stuErr;
+    const { data: recData, error: recErr } = await supabaseClient.from('receipts').select('*');
+    if (recErr) throw recErr;
+
+    const payload = {
+      app: 'Study Tour Fund Manager',
+      version: 2,
+      exportedAt: new Date().toISOString(),
+      data: {
+        students: (stuData || []).map(s => ({
+          id: s.id, name: s.name, className: s.class_name, gender: s.gender || 'Not specified'
+        })),
+        receipts: (recData || []).map(r => ({
+          id: r.id, studentId: r.student_id, date: r.date,
+          amount: Number(r.amount), created: r.created ? new Date(r.created).getTime() : 0
+        }))
+      }
+    };
+
+    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'study-tour-fund-backup-' + new Date().toISOString().slice(0, 10) + '.json';
+    a.click();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+  } catch (err) {
+    console.error('backup error:', err);
+    alert('Failed to create backup: ' + (err.message || err));
+  }
+});
+
+// ============================================================
+//  RESTORE
+// ============================================================
+$('restoreBtn').addEventListener('click', async () => {
+  const file = $('restoreFile').files[0];
+  if (!file) { alert('Please choose a backup JSON file.'); return; }
+  if (!supabaseClient) { alert('Supabase not initialized.'); return; }
+
+  try {
+    const parsed = JSON.parse(await file.text());
+    const data = parsed.data || parsed;
+
+    if (!data || !Array.isArray(data.students) || !Array.isArray(data.receipts)) {
+      throw new Error('Invalid backup structure');
+    }
+    const validStudents = data.students.every(x =>
+      x && typeof x.id === 'string' && typeof x.name === 'string' && typeof x.className === 'string');
+    const validReceipts = data.receipts.every(x =>
+      x && typeof x.id === 'string' && typeof x.studentId === 'string' &&
+      typeof x.date === 'string' && Number.isFinite(Number(x.amount)) && Number(x.amount) > 0);
+    if (!validStudents || !validReceipts) throw new Error('Backup contains invalid records');
+
+    if (!confirm('Restore this backup? All current students and receipts in Supabase will be replaced.')) return;
+
+    // Delete receipts first (FK constraint)
+    let { error: delRecErr } = await supabaseClient.from('receipts').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (delRecErr) throw delRecErr;
+
+    // Delete students
+    let { error: delStuErr } = await supabaseClient.from('students').delete().neq('id', '00000000-0000-0000-0000-000000000000');
+    if (delStuErr) throw delStuErr;
+
+    // Insert students
+    if (data.students.length > 0) {
+      const studentRows = data.students.map(s => ({
+        id: s.id, name: s.name, class_name: s.className, gender: s.gender || 'Not specified'
+      }));
+      let { error: insStuErr } = await supabaseClient.from('students').insert(studentRows);
+      if (insStuErr) throw insStuErr;
+    }
+
+    // Insert receipts
+    if (data.receipts.length > 0) {
+      const receiptRows = data.receipts.map(r => ({
+        id: r.id, student_id: r.studentId, date: r.date,
+        amount: Number(r.amount),
+        created: r.created ? new Date(r.created).toISOString() : new Date().toISOString()
+      }));
+      let { error: insRecErr } = await supabaseClient.from('receipts').insert(receiptRows);
+      if (insRecErr) throw insRecErr;
+    }
+
+    $('restoreFile').value = '';
+    await loadDataFromSupabase();
+    alert('Backup restored successfully.');
+  } catch (err) {
+    console.error('restore error:', err);
+    alert('Could not restore backup: ' + (err.message || err));
+  }
+});
+
+// ============================================================
+//  EVENT LISTENERS
+// ============================================================
+$('dailyBtn').addEventListener('click', renderDaily);
+$('reportDate').addEventListener('change', renderDaily);
+$('studentFilter').addEventListener('change', render);
+
+// ============================================================
+//  INIT
+// ============================================================
+(function init() {
+  const today = new Date().toISOString().slice(0, 10);
+  $('receiptDate').value = today;
+  $('reportDate').value = today;
+  loadDataFromSupabase().catch(err => console.error('Initial load error:', err));
+})();
+</script>
+</body>
+</html>
