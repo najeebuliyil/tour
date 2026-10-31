@@ -79,6 +79,7 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
     <button class="active" data-tab="dashboard">Dashboard</button>
     <button data-tab="students">Students</button>
     <button data-tab="receipts">Add Receipt</button>
+    <button data-tab="payments">Tour Payments</button>
     <button data-tab="reports">Reports</button>
     <button data-tab="backup">Backup &amp; Restore</button>
   </nav>
@@ -150,6 +151,28 @@ footer{text-align:center;color:var(--muted);font-size:12px;padding:18px}
         <table><thead><tr><th>Date</th><th>Student</th><th>Class</th><th>Amount</th><th>Action</th></tr></thead>
           <tbody id="receiptRows"></tbody></table>
       </div>
+    </div>
+  </section>
+
+  <!-- TOUR PAYMENTS -->
+  <section id="payments" class="panel">
+    <div class="card">
+      <h2>Record a tour payment / expense</h2>
+      <form id="paymentForm">
+        <div class="grid">
+          <div class="field"><label for="paymentDate">Payment date</label><input id="paymentDate" type="date" required></div>
+          <div class="field"><label for="paymentPayee">Paid to / Payee</label><input id="paymentPayee" maxlength="120" required placeholder="e.g. Bus operator"></div>
+          <div class="field"><label for="paymentPurpose">Purpose</label><input id="paymentPurpose" maxlength="200" required placeholder="e.g. Bus advance, tickets, food"></div>
+          <div class="field"><label for="paymentAmount">Amount (₹)</label><input id="paymentAmount" type="number" min="0.01" step="0.01" required placeholder="Enter amount"></div>
+        </div>
+        <button class="btn" type="submit" id="savePaymentBtn">Save payment</button>
+        <div class="notice">Payments are stored separately from student collection receipts. The Supabase table setup instructions are provided below.</div>
+      </form>
+    </div>
+    <div class="card">
+      <h2>Tour payment records</h2>
+      <div class="table-wrap"><table><thead><tr><th>Date</th><th>Paid to</th><th>Purpose</th><th>Amount</th><th>PDF</th><th>Action</th></tr></thead><tbody id="paymentRows"></tbody></table></div>
+      <p class="notice">If payments cannot load or save, create the <code>tour_payments</code> table in Supabase using the SQL shown in the instructions accompanying this file.</p>
     </div>
   </section>
 
@@ -275,6 +298,7 @@ try {
 // ============================================================
 let students = [];   // { id, name, className, gender }
 let receipts = [];   // { id, studentId, date, amount, created }
+let payments = [];   // { id, date, payee, purpose, amount, created }
 
 // ============================================================
 //  UTILITY FUNCTIONS
@@ -306,6 +330,18 @@ async function loadDataFromSupabase() {
       .order('date', { ascending: false })
       .order('created', { ascending: false });
     if (recErr) throw recErr;
+
+    const { data: payData, error: payErr } = await supabaseClient
+      .from('tour_payments')
+      .select('*')
+      .order('date', { ascending: false })
+      .order('created', { ascending: false });
+    if (payErr) {
+      console.warn('Tour payments table is not ready or access was denied:', payErr.message || payErr);
+      payments = [];
+    } else {
+      payments = (payData || []).map(p => ({ id:p.id, date:p.date, payee:p.payee, purpose:p.purpose, amount:Number(p.amount), created:p.created ? new Date(p.created).getTime() : 0 }));
+    }
 
     students = (stuData || []).map(s => ({
       id: s.id,
@@ -390,7 +426,7 @@ function render() {
 
   $('receiptRows').innerHTML = sorted.length
     ? sorted.map(r =>
-        receiptHtml(r) + `<td><button class="btn danger" onclick="deleteReceipt('${r.id}')">Delete</button></td></tr>`
+        receiptHtml(r) + `<td><button class="btn secondary small" onclick="printReceipt('${r.id}')">Receipt PDF</button> <button class="btn danger" onclick="deleteReceipt('${r.id}')">Delete</button></td></tr>`
       ).join('')
     : emptyRow(5, 'No receipts recorded yet');
 
@@ -425,6 +461,10 @@ function render() {
   $('allRows').innerHTML = sorted.length
     ? sorted.map(r => receiptHtml(r) + '</tr>').join('')
     : emptyRow(4, 'No receipts recorded yet');
+
+  $('paymentRows').innerHTML = payments.length
+    ? [...payments].sort((a,b) => b.date.localeCompare(a.date) || b.created-a.created).map(p => `<tr><td>${esc(p.date)}</td><td>${esc(p.payee)}</td><td>${esc(p.purpose)}</td><td>${money(p.amount)}</td><td><button class="btn secondary small" onclick="printPayment('${p.id}')">Receipt PDF</button></td><td><button class="btn danger" onclick="deletePayment('${p.id}')">Delete</button></td></tr>`).join('')
+    : emptyRow(6, 'No tour payments recorded yet');
 
   renderDaily();
 }
@@ -542,6 +582,48 @@ $('receiptForm').addEventListener('submit', async e => {
     $('saveReceiptBtn').textContent = 'Save receipt';
   }
 });
+
+// ============================================================
+//  RECEIPT / PAYMENT PDF OUTPUT (uses browser Print > Save as PDF)
+// ============================================================
+function openDocumentForPdf(title, subtitle, rows, amountLabel, amount) {
+  const w = window.open('', '_blank', 'width=800,height=700');
+  if (!w) { alert('Please allow pop-ups for this site to create the PDF.'); return; }
+  const safe = v => esc(v);
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${safe(title)}</title><style>body{font-family:Arial,sans-serif;color:#172033;margin:32px}header{text-align:center;border-bottom:2px solid #2457a6;padding-bottom:14px;margin-bottom:24px}h1{font-size:23px;color:#173e7c;margin:0 0 5px}h2{font-size:18px;margin:0 0 5px}.muted{color:#687386}table{width:100%;border-collapse:collapse;margin-top:20px}th,td{text-align:left;padding:12px;border:1px solid #d8dee8}th{width:35%;background:#f4f6fa}.total{font-size:20px;font-weight:bold;text-align:right;margin-top:25px}.sign{display:flex;justify-content:space-between;margin-top:70px}.sign span{border-top:1px solid #777;padding-top:8px;width:40%;text-align:center}@media print{body{margin:18mm}}</style></head><body><header><h1>STUDY TOUR 2026</h1><h2>GVHSS Chirakkara</h2><p class="muted">${safe(subtitle)}</p></header><table>${rows.map(r=>`<tr><th>${safe(r[0])}</th><td>${safe(r[1])}</td></tr>`).join('')}</table><p class="total">${safe(amountLabel)}: ${safe(money(amount))}</p><div class="sign"><span>Prepared by</span><span>Authorised signature</span></div><script>window.onload=()=>setTimeout(()=>window.print(),250);<\/script></body></html>`);
+  w.document.close();
+}
+window.printReceipt = id => {
+  const r = receipts.find(x => x.id === id); if (!r) return;
+  const st = studentById(r.studentId);
+  openDocumentForPdf('Study Tour Collection Receipt', 'STUDENT COLLECTION RECEIPT', [['Receipt date',r.date],['Receipt / reference',r.id],['Student name',st?.name || 'Deleted student'],['Class',st?.className || ''],['Gender',st?.gender || ''],['Payment type','Student tour collection']], 'Amount received', r.amount);
+};
+window.printPayment = id => {
+  const p = payments.find(x => x.id === id); if (!p) return;
+  openDocumentForPdf('Study Tour Payment Voucher', 'TOUR PAYMENT VOUCHER', [['Payment date',p.date],['Payment / reference',p.id],['Paid to',p.payee],['Purpose',p.purpose]], 'Amount paid', p.amount);
+};
+
+$('paymentDate').value = new Date().toISOString().slice(0,10);
+$('paymentForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  const date=$('paymentDate').value, payee=$('paymentPayee').value.trim(), purpose=$('paymentPurpose').value.trim(), amount=Number($('paymentAmount').value);
+  if (!date || !payee || !purpose || !Number.isFinite(amount) || amount<=0) { alert('Please enter a valid date, payee, purpose, and amount.'); return; }
+  if (!supabaseClient) { alert('Supabase not initialized.'); return; }
+  try {
+    $('savePaymentBtn').disabled=true; $('savePaymentBtn').textContent='Saving...';
+    const {data,error}=await supabaseClient.from('tour_payments').insert([{date,payee,purpose,amount}]).select().single();
+    if(error) throw error;
+    const p={id:data.id,date:data.date,payee:data.payee,purpose:data.purpose,amount:Number(data.amount),created:data.created?new Date(data.created).getTime():Date.now()};
+    payments.push(p); e.target.reset(); $('paymentDate').value=new Date().toISOString().slice(0,10); render();
+    if(confirm('Payment saved. Would you like to print/save its PDF voucher now?')) printPayment(p.id);
+  } catch(err) { console.error('save payment error:',err); alert('Could not save payment. Check that the tour_payments table exists in Supabase. Details: '+(err.message||err)); }
+  finally { $('savePaymentBtn').disabled=false; $('savePaymentBtn').textContent='Save payment'; }
+});
+window.deletePayment = async id => {
+  if(!confirm('Delete this tour payment record?')) return;
+  try { const {error}=await supabaseClient.from('tour_payments').delete().eq('id',id); if(error) throw error; payments=payments.filter(p=>p.id!==id); render(); }
+  catch(err){alert('Could not delete payment: '+(err.message||err));}
+};
 
 // ============================================================
 //  DELETE RECEIPT
